@@ -1,50 +1,83 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { CssBaseline, ThemeProvider } from "@mui/material";
+import { AppShell } from "./components/AppShell";
+import { LibraryScreen } from "./components/LibraryScreen";
+import { MangaPreviewDialog } from "./components/MangaPreviewDialog";
+import { PlaceholderScreen } from "./components/PlaceholderScreen";
+import { mockManga } from "./data/mockManga";
+import type { Destination, LibraryFilter, LibrarySort, Manga } from "./models";
+import { navigationItems } from "./navigation";
+import { theme } from "./theme";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [activeDestination, setActiveDestination] = useState<Destination>("library");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<LibraryFilter>("all");
+  const [sort, setSort] = useState<LibrarySort>("title");
+  const [selectedManga, setSelectedManga] = useState<Manga | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositions = useRef<Partial<Record<Destination, number>>>({});
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  const visibleManga = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filtered = mockManga.filter((manga) => {
+      const matchesQuery = !normalizedQuery || manga.title.toLocaleLowerCase().includes(normalizedQuery);
+      const matchesFilter = filter === "all" || (filter === "unread" && manga.unreadChapterCount > 0) || (filter === "completed" && manga.publicationStatus === "completed");
+      return matchesQuery && matchesFilter;
+    });
+
+    return [...filtered].sort((left, right) => {
+      if (sort === "title") return left.title.localeCompare(right.title);
+      if (sort === "added") return right.dateAdded.localeCompare(left.dateAdded) || left.title.localeCompare(right.title);
+      if (!left.lastReadTimestamp && !right.lastReadTimestamp) return left.title.localeCompare(right.title);
+      if (!left.lastReadTimestamp) return 1;
+      if (!right.lastReadTimestamp) return -1;
+      return right.lastReadTimestamp.localeCompare(left.lastReadTimestamp) || left.title.localeCompare(right.title);
+    });
+  }, [filter, query, sort]);
+
+  useLayoutEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (contentRef.current) contentRef.current.scrollTop = scrollPositions.current[activeDestination] ?? 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeDestination]);
+
+  function navigate(destination: Destination) {
+    if (contentRef.current) scrollPositions.current[activeDestination] = contentRef.current.scrollTop;
+    setActiveDestination(destination);
   }
 
+  function resetLibraryView() {
+    setQuery("");
+    setFilter("all");
+  }
+
+  const activeItem = navigationItems.find((item) => item.id === activeDestination) ?? navigationItems[0];
+
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AppShell activeDestination={activeDestination} contentRef={contentRef} onNavigate={navigate}>
+        {activeDestination === "library" ? (
+          <LibraryScreen
+            manga={visibleManga}
+            totalMangaCount={mockManga.length}
+            query={query}
+            filter={filter}
+            sort={sort}
+            onQueryChange={setQuery}
+            onFilterChange={setFilter}
+            onSortChange={setSort}
+            onSelectManga={setSelectedManga}
+            onBrowse={() => navigate("browse")}
+            onReset={resetLibraryView}
+          />
+        ) : <PlaceholderScreen item={activeItem} />}
+      </AppShell>
+      <MangaPreviewDialog manga={selectedManga} onClose={() => setSelectedManga(null)} />
+    </ThemeProvider>
   );
 }
 
