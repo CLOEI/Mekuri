@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, ButtonBase, Typography } from "@mui/material";
 import type { Manga } from "../models";
 
@@ -13,6 +13,7 @@ const coverRadius = "4px";
 export function MangaCard({ manga, eager = false, onClick }: MangaCardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  useEffect(() => { setImageFailed(false); setImageLoaded(false); }, [manga.coverAsset]);
   const initials = manga.title.split(" ").slice(0, 2).map((word) => word[0]).join("");
   const hasBadges = manga.downloadedChapterCount > 0 || manga.unreadChapterCount > 0;
   const badgeDescriptionId = `${manga.id}-count-description`;
@@ -41,7 +42,7 @@ export function MangaCard({ manga, eager = false, onClick }: MangaCardProps) {
     >
       <Box className="cover-frame" sx={{ position: "relative", width: "100%", aspectRatio: "2 / 3", overflow: "hidden", borderRadius: coverRadius, backgroundColor: "#293333" }}>
         {!imageLoaded && !imageFailed && <Box aria-hidden="true" sx={{ position: "absolute", inset: 0, backgroundColor: "#293333" }} />}
-        {imageFailed ? (
+        {!manga.coverAsset || imageFailed ? (
           <CoverFallback initials={initials} />
         ) : (
           <Box component="img" src={manga.coverAsset} alt="" loading={eager ? "eager" : "lazy"} decoding="async" onLoad={() => setImageLoaded(true)} onError={() => { setImageFailed(true); setImageLoaded(false); }} sx={{ display: "block", width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", opacity: imageLoaded ? 1 : 0 }} />

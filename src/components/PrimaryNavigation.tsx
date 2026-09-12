@@ -5,9 +5,10 @@ import { navigationItems } from "../navigation";
 interface PrimaryNavigationProps {
   activeDestination: Destination;
   onNavigate: (destination: Destination) => void;
+  hiddenOnMobile?: boolean;
 }
 
-export function PrimaryNavigation({ activeDestination, onNavigate }: PrimaryNavigationProps) {
+export function PrimaryNavigation({ activeDestination, onNavigate, hiddenOnMobile = false }: PrimaryNavigationProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
 
@@ -69,6 +70,8 @@ export function PrimaryNavigation({ activeDestination, onNavigate }: PrimaryNavi
       </Drawer>
     );
   }
+
+  if (hiddenOnMobile) return null;
 
   return (
     <BottomNavigation

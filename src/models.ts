@@ -2,6 +2,9 @@ export type PublicationStatus = "ongoing" | "completed" | "hiatus";
 
 export interface Manga {
   id: string;
+  /** Source identity used to reload live details and chapters from Library. */
+  sourceId?: string;
+  sourceMangaId?: string;
   title: string;
   coverAsset: string;
   sourceName: string;
@@ -15,4 +18,4 @@ export interface Manga {
 
 export type LibraryFilter = "all" | "unread" | "completed";
 export type LibrarySort = "title" | "added" | "read";
-export type Destination = "library" | "updates" | "history" | "browse" | "more";
+export type Destination = "library" | "browse";

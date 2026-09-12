@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "package:extension": "bun run tools/package-extension.ts",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -14,6 +15,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
+    "@tanstack/react-virtual": "^3.14.12",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "react": "^19.1.0",

@@ -1,0 +1,36 @@
+{
+  "formatVersion": 1,
+  "id": "org.mekuri.mangadex",
+  "name": "MangaDex",
+  "version": "1.1.4",
+  "hostApiVersion": "1.0",
+  "entry": "source.ts",
+  "description": "MangaDex catalogue and chapter reader source for Mekuri.",
+  "author": "Mekuri example authors",
+  "language": "en",
+  "languages": [
+    { "code": "en", "label": "English" },
+    { "code": "es", "label": "Spanish" },
+    { "code": "es-la", "label": "Spanish (Latin America)" },
+    { "code": "pt-br", "label": "Portuguese (Brazil)" },
+    { "code": "fr", "label": "French" },
+    { "code": "de", "label": "German" },
+    { "code": "it", "label": "Italian" },
+    { "code": "id", "label": "Indonesian" },
+    { "code": "pl", "label": "Polish" },
+    { "code": "ru", "label": "Russian" },
+    { "code": "tr", "label": "Turkish" },
+    { "code": "vi", "label": "Vietnamese" },
+    { "code": "th", "label": "Thai" },
+    { "code": "ja", "label": "Japanese" },
+    { "code": "ko", "label": "Korean" },
+    { "code": "zh", "label": "Chinese" },
+    { "code": "zh-hk", "label": "Chinese (Traditional)" }
+  ],
+  "contentRating": "mature",
+  "requestedHosts": [
+    "https://api.mangadex.org/",
+    "https://uploads.mangadex.org/",
+    "https://*.mangadex.network/"
+  ]
+}
