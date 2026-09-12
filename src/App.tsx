@@ -4,18 +4,23 @@ import { AppShell } from "./components/AppShell";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { MangaDetailsScreen } from "./components/MangaDetailsScreen";
 import { BrowseScreen, MangaSourceDetails } from "./components/BrowseScreen";
+import type { ReaderBridge } from "./components/ReaderScreen";
+import { loadReaderSettings, saveReaderSettings, type ReaderSettings } from "./reader/readerSettings";
+import { isReadingMode, type ReadingMode } from "./reader/readingMode";
 import type { Destination, LibraryFilter, LibrarySort, Manga } from "./models";
 import { theme } from "./theme";
 import "./App.css";
 
 const LIBRARY_STORAGE_KEY = "mekuri.library.v1";
+/** Page changes are frequent, so the last read stamp is only refreshed this often. */
+const PROGRESS_WRITE_INTERVAL = 60_000;
 
 function loadLibrary(): Manga[] {
   try {
     const stored = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
     const parsed: unknown = stored ? JSON.parse(stored) : [];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((value): value is Manga => typeof value === "object" && value !== null && typeof value.id === "string" && typeof value.title === "string" && typeof value.coverAsset === "string" && typeof value.sourceName === "string" && (value.publicationStatus === "ongoing" || value.publicationStatus === "completed" || value.publicationStatus === "hiatus") && typeof value.totalChapterCount === "number" && typeof value.unreadChapterCount === "number" && typeof value.downloadedChapterCount === "number" && typeof value.dateAdded === "string" && (typeof value.lastReadTimestamp === "string" || value.lastReadTimestamp === null));
+    return parsed.filter((value): value is Manga => typeof value === "object" && value !== null && typeof value.id === "string" && typeof value.title === "string" && typeof value.coverAsset === "string" && typeof value.sourceName === "string" && (value.publicationStatus === "ongoing" || value.publicationStatus === "completed" || value.publicationStatus === "hiatus") && typeof value.totalChapterCount === "number" && typeof value.unreadChapterCount === "number" && typeof value.downloadedChapterCount === "number" && typeof value.dateAdded === "string" && (typeof value.lastReadTimestamp === "string" || value.lastReadTimestamp === null) && (value.readingMode === undefined || isReadingMode(value.readingMode)));
   } catch {
     return [];
   }
@@ -36,6 +41,8 @@ function App() {
   const [libraryManga, setLibraryManga] = useState<Manga[]>(loadLibrary);
   const [selectedManga, setSelectedManga] = useState<Manga | null>(null);
   const [browseDetailsOpen, setBrowseDetailsOpen] = useState(false);
+  const [readerSettings, setReaderSettings] = useState<ReaderSettings>(loadReaderSettings);
+  const [sessionReadingModes, setSessionReadingModes] = useState<Record<string, ReadingMode>>({});
   const contentRef = useRef<HTMLDivElement | null>(null);
   const scrollPositions = useRef<Partial<Record<Destination, number>>>({});
 
@@ -62,6 +69,32 @@ function App() {
   useEffect(() => {
     try { window.localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(libraryManga)); } catch { /* Storage may be unavailable in a restricted webview. */ }
   }, [libraryManga]);
+
+  useEffect(() => { saveReaderSettings(readerSettings); }, [readerSettings]);
+
+  // The override lives on the series row, so it only persists for series in the
+  // library. Anything read straight from Browse keeps its choice for the session.
+  const reader = useMemo<ReaderBridge>(() => ({
+    settings: readerSettings,
+    onSettingsChange: setReaderSettings,
+    readingModeFor: (mangaId) => libraryManga.find((manga) => manga.id === mangaId)?.readingMode ?? sessionReadingModes[mangaId] ?? "DEFAULT",
+    onReadingModeChange: (mangaId, mode) => {
+      setSessionReadingModes((modes) => ({ ...modes, [mangaId]: mode }));
+      setLibraryManga((items) => items.map((manga) => manga.id === mangaId ? { ...manga, readingMode: mode } : manga));
+    },
+    onProgress: (mangaId) => {
+      const now = Date.now();
+      setLibraryManga((items) => {
+        const index = items.findIndex((manga) => manga.id === mangaId);
+        if (index < 0) return items;
+        const last = items[index].lastReadTimestamp ? Date.parse(items[index].lastReadTimestamp) : 0;
+        if (now - last < PROGRESS_WRITE_INTERVAL) return items;
+        const next = [...items];
+        next[index] = { ...next[index], lastReadTimestamp: new Date(now).toISOString() };
+        return next;
+      });
+    },
+  }), [libraryManga, readerSettings, sessionReadingModes]);
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -122,6 +155,7 @@ function App() {
             libraryIds={libraryIds}
             onAddToLibrary={addToLibrary}
             onRemoveFromLibrary={removeFromLibrary}
+            reader={reader}
             onBack={closeLibraryDetails}
           /> : <MangaDetailsScreen
           manga={{ id: selectedManga.id, title: selectedManga.title, coverAsset: selectedManga.coverAsset, sourceName: selectedManga.sourceName, publicationStatus: selectedManga.publicationStatus, authors: null, artists: null, description: null, genres: null }}
@@ -144,7 +178,7 @@ function App() {
             onBrowse={() => navigate("browse")}
             onReset={resetLibraryView}
           />
-        ) : activeDestination === "browse" ? <BrowseScreen onDetailsChange={setBrowseDetails} libraryIds={libraryIds} onAddToLibrary={addToLibrary} onRemoveFromLibrary={removeFromLibrary} scrollRef={contentRef} /> : null}
+        ) : activeDestination === "browse" ? <BrowseScreen onDetailsChange={setBrowseDetails} libraryIds={libraryIds} onAddToLibrary={addToLibrary} onRemoveFromLibrary={removeFromLibrary} reader={reader} scrollRef={contentRef} /> : null}
       </AppShell>
     </ThemeProvider>
   );

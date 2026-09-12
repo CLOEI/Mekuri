@@ -16,6 +16,7 @@ import {
 import type { ChangeEvent, ReactNode, RefObject } from "react";
 import { MangaCard } from "./MangaCard";
 import { MangaDetailsScreen } from "./MangaDetailsScreen";
+import { ReaderScreen, type ReaderBridge } from "./ReaderScreen";
 import { fetchExtensionImage, inspectExtension, installStagedExtension, listExtensions, setExtensionEnabled, setExtensionLanguage, sourceCall, uninstallExtension, type Chapter, type ExtensionManifest, type InstalledExtension, type MangaDetails, type MangaPage, type PageReference, type SourceManga, type StagedExtension } from "../extensionApi";
 import type { Manga } from "../models";
 
@@ -29,7 +30,7 @@ function ratingLabel(rating: string) { return rating.slice(0, 1).toUpperCase() +
 const coverResourceCache = new Map<string, string>();
 const coverResourceRequests = new Map<string, Promise<string>>();
 
-export function BrowseScreen({ onDetailsChange, libraryIds, onAddToLibrary, onRemoveFromLibrary, scrollRef }: { onDetailsChange?: (open: boolean) => void; libraryIds: Set<string>; onAddToLibrary: (manga: Manga) => void; onRemoveFromLibrary: (id: string) => void; scrollRef: RefObject<HTMLDivElement | null> }) {
+export function BrowseScreen({ onDetailsChange, libraryIds, onAddToLibrary, onRemoveFromLibrary, reader, scrollRef }: { onDetailsChange?: (open: boolean) => void; libraryIds: Set<string>; onAddToLibrary: (manga: Manga) => void; onRemoveFromLibrary: (id: string) => void; reader: ReaderBridge; scrollRef: RefObject<HTMLDivElement | null> }) {
   const [tab, setTab] = useState(0);
   const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -93,7 +94,7 @@ export function BrowseScreen({ onDetailsChange, libraryIds, onAddToLibrary, onRe
         <Tab label={`Extensions${extensions.length ? ` (${extensions.length})` : ""}`} />
       </Tabs>
       {loadError && <Alert severity="error" action={<Button color="inherit" onClick={() => void refresh()}>Retry</Button>}>{loadError}</Alert>}
-      {tab === 0 ? <SourcesPanel extensions={extensions} onDetailsChange={onDetailsChange} libraryIds={libraryIds} onAddToLibrary={onAddToLibrary} onRemoveFromLibrary={onRemoveFromLibrary} scrollRef={scrollRef} /> : <ExtensionsPanel extensions={extensions} busy={busy} onImport={() => fileInput.current?.click()} onToggle={toggle} onLanguage={changeLanguage} onRemove={remove} />}
+      {tab === 0 ? <SourcesPanel extensions={extensions} onDetailsChange={onDetailsChange} libraryIds={libraryIds} onAddToLibrary={onAddToLibrary} onRemoveFromLibrary={onRemoveFromLibrary} reader={reader} scrollRef={scrollRef} /> : <ExtensionsPanel extensions={extensions} busy={busy} onImport={() => fileInput.current?.click()} onToggle={toggle} onLanguage={changeLanguage} onRemove={remove} />}
     </Stack>
     <input ref={fileInput} hidden type="file" accept=".mekuri-ext,application/zip" onChange={(event) => void onPackageSelected(event)} />
     <ReviewDialog staged={staged} existing={staged ? extensions.find((extension) => extension.extensionId === staged.manifest.id) : undefined} busy={busy} onClose={() => setStaged(null)} onInstall={(language) => void install(language)} />
@@ -120,7 +121,7 @@ function ExtensionsPanel({ extensions, busy, onImport, onToggle, onLanguage, onR
   </Stack>;
 }
 
-function SourcesPanel({ extensions, onDetailsChange, libraryIds, onAddToLibrary, onRemoveFromLibrary, scrollRef }: { extensions: InstalledExtension[]; onDetailsChange?: (open: boolean) => void; libraryIds: Set<string>; onAddToLibrary: (manga: Manga) => void; onRemoveFromLibrary: (id: string) => void; scrollRef: RefObject<HTMLDivElement | null> }) {
+function SourcesPanel({ extensions, onDetailsChange, libraryIds, onAddToLibrary, onRemoveFromLibrary, reader, scrollRef }: { extensions: InstalledExtension[]; onDetailsChange?: (open: boolean) => void; libraryIds: Set<string>; onAddToLibrary: (manga: Manga) => void; onRemoveFromLibrary: (id: string) => void; reader: ReaderBridge; scrollRef: RefObject<HTMLDivElement | null> }) {
   const sources = extensions.filter((extension) => extension.enabled);
   const [selectedSource, setSelectedSource] = useState<string | null>(sources[0]?.extensionId ?? null);
   const [catalog, setCatalog] = useState<"popular" | "latest">("popular");
@@ -186,7 +187,7 @@ function SourcesPanel({ extensions, onDetailsChange, libraryIds, onAddToLibrary,
   }, [hasNextPage, loadPage, loadingInitial, loadingMore, nextPage]);
 
   if (sources.length === 0) return <EmptyState icon={<ExtensionOutlinedIcon />} title="No enabled sources" body="Install an extension, then enable it to browse its catalogue." />;
-  if (selected) return <MangaSourceDetails sourceId={selected.sourceId} summary={selected.manga} sourceName={sources.find((source) => source.extensionId === selected.sourceId)?.name ?? "Source unavailable"} libraryIds={libraryIds} onAddToLibrary={onAddToLibrary} onRemoveFromLibrary={onRemoveFromLibrary} onBack={() => { setSelected(null); onDetailsChange?.(false); }} />;
+  if (selected) return <MangaSourceDetails sourceId={selected.sourceId} summary={selected.manga} sourceName={sources.find((source) => source.extensionId === selected.sourceId)?.name ?? "Source unavailable"} libraryIds={libraryIds} onAddToLibrary={onAddToLibrary} onRemoveFromLibrary={onRemoveFromLibrary} reader={reader} onBack={() => { setSelected(null); onDetailsChange?.(false); }} />;
   const active = sources.find((source) => source.extensionId === selectedSource) ?? sources[0];
   return <Stack spacing={2}>
     <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}><TextField select label="Source" value={active.extensionId} onChange={(event) => setSelectedSource(event.target.value)} size="small" sx={{ minWidth: 220 }}>{sources.map((source) => <MenuItem key={source.extensionId} value={source.extensionId}>{source.name} · {source.language}</MenuItem>)}</TextField><TextField size="small" label="Search this source" value={query} onChange={(event) => setQuery(event.target.value)} slotProps={{ input: { endAdornment: <InputAdornment position="end"><SearchOutlinedIcon fontSize="small" /></InputAdornment> } }} sx={{ minWidth: { sm: 280 } }} /></Stack>
@@ -277,10 +278,10 @@ export function SourceDetails({ sourceId, summary, onBack }: { sourceId: string;
   return <Stack spacing={2}><Button startIcon={<ArrowBackOutlinedIcon />} onClick={onBack} sx={{ alignSelf: "flex-start" }}>Back to {"source"}</Button>{loading ? <CircularProgress sx={{ alignSelf: "center", my: 8 }} /> : error ? <EmptyState title="Could not load manga" body={error} action={<Button onClick={onBack}>Back</Button>} /> : <><Stack direction={{ xs: "column", sm: "row" }} spacing={2}><Box sx={{ width: 150, aspectRatio: "2/3", borderRadius: 2, overflow: "hidden", backgroundColor: "#293333" }}>{summary.coverUrl && <RemoteImage sourceId={sourceId} url={details?.coverUrl ?? summary.coverUrl} alt="" />}</Box><Box><Typography variant="h1">{details?.title ?? summary.title}</Typography><Stack direction="row" spacing={1} sx={{ mt: 1, mb: 1.5 }}>{(details?.publicationStatus ?? summary.publicationStatus) && <Chip size="small" label={details?.publicationStatus ?? summary.publicationStatus} />}{(details?.contentRating ?? summary.contentRating) && <Chip size="small" label={ratingLabel(details?.contentRating ?? summary.contentRating!)} />}</Stack><Typography color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>{details?.description ?? "No description provided by the source."}</Typography><Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{details?.authors?.join(", ") ?? "Author unknown"}</Typography></Box></Stack><Divider /><Typography variant="h2">Chapters ({chapters.length})</Typography>{chapters.length ? <List disablePadding>{chapters.map((chapter) => <ListItem key={chapter.id} divider secondaryAction={chapter.externalUrl ? <Button onClick={() => void openUrl(chapter.externalUrl!)}>Open official</Button> : <Button onClick={() => void sourceCall<PageReference[]>(sourceId, "getPages", { chapterId: chapter.id }).then(setPages).catch((operationError) => setError(readableError(operationError)))}>Read</Button>}><ListItemText primary={chapter.title || (chapter.number == null ? "Chapter" : `Chapter ${chapter.number}`)} secondary={chapter.externalUrl ? "Official external chapter" : (chapter.publishedAt ?? "Publication date unknown")} /></ListItem>)}</List> : <Typography color="text.secondary">No chapters returned by this source.</Typography>}</>}</Stack>;
 }
 
-export function MangaSourceDetails({ sourceId, summary, sourceName, libraryIds, onAddToLibrary, onRemoveFromLibrary, onBack }: { sourceId: string; summary: SourceManga; sourceName: string; libraryIds: Set<string>; onAddToLibrary: (manga: Manga) => void; onRemoveFromLibrary: (id: string) => void; onBack: () => void }) {
+export function MangaSourceDetails({ sourceId, summary, sourceName, libraryIds, onAddToLibrary, onRemoveFromLibrary, reader, onBack }: { sourceId: string; summary: SourceManga; sourceName: string; libraryIds: Set<string>; onAddToLibrary: (manga: Manga) => void; onRemoveFromLibrary: (id: string) => void; reader: ReaderBridge; onBack: () => void }) {
   const [details, setDetails] = useState<MangaDetails | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [pages, setPages] = useState<PageReference[] | null>(null);
+  const [readingChapterId, setReadingChapterId] = useState<string | null>(null);
   const [coverAsset, setCoverAsset] = useState<string | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(true);
   const [chaptersLoading, setChaptersLoading] = useState(true);
@@ -317,9 +318,20 @@ export function MangaSourceDetails({ sourceId, summary, sourceName, libraryIds, 
     return () => { active = false; };
   }, [coverUrl, sourceId]);
 
-  if (pages) return <LazyReader sourceId={sourceId} pages={pages} title={details?.title ?? summary.title} onBack={() => setPages(null)} />;
   const libraryId = `${sourceId}:${summary.id}`;
   const isInLibrary = libraryIds.has(libraryId);
+  if (readingChapterId) return <ReaderScreen
+    sourceId={sourceId}
+    title={details?.title ?? summary.title}
+    chapters={chapters}
+    initialChapterId={readingChapterId}
+    settings={reader.settings}
+    seriesReadingMode={reader.readingModeFor(libraryId)}
+    onSettingsChange={reader.onSettingsChange}
+    onSeriesReadingModeChange={(mode) => reader.onReadingModeChange(libraryId, mode)}
+    onProgress={(chapterId, pageIndex, pageCount) => reader.onProgress(libraryId, chapterId, pageIndex, pageCount)}
+    onBack={() => setReadingChapterId(null)}
+  />;
   return <MangaDetailsScreen
     manga={{ id: libraryId, title: details?.title ?? summary.title, coverAsset, sourceName, publicationStatus: details?.publicationStatus ?? summary.publicationStatus, authors: details?.authors ?? null, artists: details?.artists ?? null, description: details?.description ?? null, genres: details?.genres ?? null }}
     chapters={chapters}
@@ -332,42 +344,8 @@ export function MangaSourceDetails({ sourceId, summary, sourceName, libraryIds, 
     onLibraryToggle={isInLibrary ? () => onRemoveFromLibrary(libraryId) : () => onAddToLibrary({ id: libraryId, sourceId, sourceMangaId: summary.id, title: details?.title ?? summary.title, coverAsset: coverAsset ?? "", sourceName, publicationStatus: details?.publicationStatus === "completed" || details?.publicationStatus === "hiatus" ? details.publicationStatus : "ongoing", totalChapterCount: chapters.length, unreadChapterCount: 0, downloadedChapterCount: 0, dateAdded: new Date().toISOString().slice(0, 10), lastReadTimestamp: null })}
     onRetryMetadata={() => setMetadataRequest((value) => value + 1)}
     onRetryChapters={() => setChaptersRequest((value) => value + 1)}
-    onReadChapter={(chapter) => void sourceCall<PageReference[]>(sourceId, "getPages", { chapterId: chapter.id }).then(setPages).catch((error) => setChaptersError(readableError(error)))}
+    onReadChapter={(chapter) => setReadingChapterId(chapter.id)}
   />;
-}
-
-function LazyReader({ sourceId, pages, title, onBack }: { sourceId: string; pages: PageReference[]; title: string; onBack: () => void }) {
-  const [resources, setResources] = useState<Record<number, string>>({});
-  const [failed, setFailed] = useState<Record<number, string>>({});
-  const pageNodes = useRef(new Map<number, HTMLDivElement>());
-  const loadingPages = useRef(new Set<number>());
-  const load = useCallback(async (page: PageReference) => {
-    if (loadingPages.current.has(page.index)) return;
-    loadingPages.current.add(page.index);
-    try {
-      setFailed((value) => { const next = { ...value }; delete next[page.index]; return next; });
-      const resource = await fetchExtensionImage(sourceId, page.imageUrl, page.referer);
-      setResources((value) => ({ ...value, [page.index]: resource }));
-    } catch (error) {
-      setFailed((value) => ({ ...value, [page.index]: readableError(error) }));
-    } finally {
-      loadingPages.current.delete(page.index);
-    }
-  }, [sourceId]);
-  useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const page = pages.find((value) => value.index === Number((entry.target as HTMLElement).dataset.pageIndex));
-        if (!page || resources[page.index] || failed[page.index]) continue;
-        observer.unobserve(entry.target);
-        void load(page);
-      }
-    }, { rootMargin: "900px 0px" });
-    pageNodes.current.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, [failed, load, pages, resources]);
-  return <Stack spacing={1.5}><Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}><Button startIcon={<ArrowBackOutlinedIcon />} onClick={onBack}>Back to details</Button><Typography variant="h2">{title}</Typography><Typography variant="body2" color="text.secondary">{pages.length} pages</Typography></Stack><Stack spacing={1.5} sx={{ alignItems: "center" }}>{pages.map((page) => <Box key={page.index} ref={(node: HTMLDivElement | null) => { if (node) pageNodes.current.set(page.index, node); else pageNodes.current.delete(page.index); }} data-page-index={page.index} sx={{ width: "min(100%, 720px)", minHeight: 180, display: "grid", placeItems: "center", backgroundColor: "#0b1010", borderRadius: 1, overflow: "hidden" }}>{resources[page.index] ? <Box component="img" src={resources[page.index]} alt={`Page ${page.index + 1}`} sx={{ display: "block", maxWidth: "100%", height: "auto" }} onError={() => { setResources((value) => { const next = { ...value }; delete next[page.index]; return next; }); setFailed((value) => ({ ...value, [page.index]: "Image could not be displayed." })); }} /> : failed[page.index] ? <Stack spacing={1} sx={{ alignItems: "center", p: 3 }}><Typography color="error">{failed[page.index]}</Typography><Button size="small" onClick={() => void load(page)}>Retry</Button></Stack> : <CircularProgress size={28} />}</Box>)}</Stack></Stack>;
 }
 
 function Reader({ sourceId, pages, title, onBack }: { sourceId: string; pages: PageReference[]; title: string; onBack: () => void }) {

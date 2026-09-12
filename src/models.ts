@@ -1,3 +1,5 @@
+import type { ReadingMode } from "./reader/readingMode";
+
 export type PublicationStatus = "ongoing" | "completed" | "hiatus";
 
 export interface Manga {
@@ -14,6 +16,8 @@ export interface Manga {
   downloadedChapterCount: number;
   dateAdded: string;
   lastReadTimestamp: string | null;
+  /** Per-series reader override. `DEFAULT`, or absent, inherits the global reading mode. */
+  readingMode?: ReadingMode;
 }
 
 export type LibraryFilter = "all" | "unread" | "completed";
